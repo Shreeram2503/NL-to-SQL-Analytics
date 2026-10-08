@@ -11,6 +11,11 @@ Run locally with:  streamlit run app.py
 import streamlit as st
 import pandas as pd
 from nl_to_sql import generate_sql, is_safe_select, run_query
+import os
+from build_db import build
+
+if not os.path.exists("retail.db"):
+    build()
 
 st.set_page_config(page_title="NL to SQL Analytics", page_icon="📊")
 
