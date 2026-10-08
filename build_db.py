@@ -16,7 +16,9 @@ import sqlite3
 import random
 from datetime import date, timedelta
 
-DB_PATH = "retail.db"
+import os
+import tempfile
+DB_PATH = os.path.join(tempfile.gettempdir(), "retail.db")
 random.seed(42)  # reproducible fake data
 
 # ---------------------------------------------------------------

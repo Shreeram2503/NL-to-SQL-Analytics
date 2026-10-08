@@ -12,9 +12,9 @@ import streamlit as st
 import pandas as pd
 from nl_to_sql import generate_sql, is_safe_select, run_query
 import os
-from build_db import build
+from build_db import build, DB_PATH
 
-if not os.path.exists("retail.db"):
+if not os.path.exists(DB_PATH):
     build()
 
 st.set_page_config(page_title="NL to SQL Analytics", page_icon="📊")

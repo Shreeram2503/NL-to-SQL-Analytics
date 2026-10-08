@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from build_db import DB_PATH
 DB_PATH = "retail.db"
 
 # -----------------------------------------------------------------
