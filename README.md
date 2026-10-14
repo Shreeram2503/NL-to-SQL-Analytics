@@ -1,4 +1,4 @@
-# Ask Your Database — Natural Language to SQL Analytics Assistant
+# Ask Your Database - Natural Language to SQL Analytics Assistant
 
 Type a question in plain English ("what are the top 5 products by revenue?")
 and get back a real SQL query, a results table, and an auto-generated chart -
@@ -60,14 +60,13 @@ normalized retail schema. See `nl\\\_to\\\_sql.py` for the full column list.
 - Charts are drawn only when the result shape fits (one label column, one numeric column, 25 rows or fewer).
 
 ## Challenges and fixes
-
 - Model response parsing: newer models can return a thinking block before the text block, so response.content\[0].text crashed. Fixed by selecting the block whose type is text.
 - Hosting: the deployed filesystem is read-only, so the SQLite file is created in the system temp directory.
 - Startup race: the database check only tested whether the file existed, so an empty file skipped the build and queries failed with "no such table". Fixed by checking that the customers table exists and building the database once per server process.
 - Secrets: the API key lives in a local .env file and in Streamlit Cloud secrets, never in the repo.
 - Startup race on the hosted app: the database check only tested whether the file existed, so an empty leftover file skipped the build and queries failed with "no such table". Fixed by checking that the customers table exists and building the database once per server process.
 
-##Limitations and roadmap:
+## Limitations and roadmap:
 - The keyword blocklist is defense in depth, next step is opening SQLite in read-only mode.
 - No query history.
 - single-turn only: no follow-up questions.
