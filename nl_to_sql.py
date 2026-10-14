@@ -1,39 +1,20 @@
 """
 nl_to_sql.py
 ------------
-The core logic, separated from the Streamlit UI on purpose.
-
-WHY separate this file from app.py: it's a portfolio best practice.
-Recruiters and interviewers who open your repo should see that you
-separate "business logic" from "UI code". It also means you could
-swap Streamlit for a Flask API later without touching this file.
-
-Three responsibilities live here:
-  1. Describe the database schema to the LLM (so it knows what
-     tables/columns exist).
-  2. Ask the LLM to turn a plain-English question into SQL.
-  3. Check the SQL is SAFE before anything executes it.
+Core logic: describe the schema, ask Claude for SQL, check it is safe,
+and run it. The UI lives in app.py.
 """
 
 import os
-import sqlite3
 import re
+import sqlite3
+
 import anthropic
 from dotenv import load_dotenv
 
+from build_db import DB_PATH, ensure_db
+
 load_dotenv()
-
-from build_db import DB_PATH
-DB_PATH = "retail.db"
-
-# -----------------------------------------------------------------
-# 1. Schema description
-# -----------------------------------------------------------------
-# WHY hardcode this instead of querying it live: for a small fixed
-# schema, a hand-written description is clearer and cheaper (fewer
-# tokens) than dumping raw PRAGMA output. For a bigger project you'd
-# generate this from the database automatically -- see
-# `describe_schema_from_db()` below for how.
 
 SCHEMA_DESCRIPTION = """
 Table: customers
@@ -61,33 +42,6 @@ Table: order_items
   quantity INTEGER
 """
 
-
-def describe_schema_from_db(db_path: str = DB_PATH) -> str:
-    """
-    Optional alternative to the hardcoded SCHEMA_DESCRIPTION above.
-    Reads the *actual* table/column names straight from SQLite.
-    Useful if your schema changes and you don't want to update the
-    docstring by hand. Not used by default, but wired up so you can
-    swap it in inside generate_sql() if you want.
-    """
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = [row[0] for row in cur.fetchall()]
-
-    lines = []
-    for table in tables:
-        cur.execute(f"PRAGMA table_info({table})")
-        cols = cur.fetchall()
-        col_desc = ", ".join(f"{c[1]} {c[2]}" for c in cols)
-        lines.append(f"Table: {table}\n  {col_desc}")
-    conn.close()
-    return "\n\n".join(lines)
-
-
-# -----------------------------------------------------------------
-# 2. Ask Claude to write the SQL
-# -----------------------------------------------------------------
 SYSTEM_PROMPT = """You are a SQL generator for a SQLite database.
 Given the schema and a user's question in plain English, output
 ONLY a single valid SQLite SELECT query that answers it. No
@@ -104,12 +58,9 @@ Rules:
 
 
 def generate_sql(question: str, api_key: str | None = None) -> str:
-    """
-    Sends the schema + question to Claude and returns the raw SQL
-    string it responds with (no execution yet -- that's a separate,
-    deliberately careful step below).
-    """
-    client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+    client = anthropic.Anthropic(
+        api_key=api_key or os.environ.get("ANTHROPIC_API_KEY")
+    )
 
     user_message = f"""Database schema:
 {SCHEMA_DESCRIPTION}
@@ -125,23 +76,16 @@ Write the SQLite SELECT query."""
         messages=[{"role": "user", "content": user_message}],
     )
 
-    sql = next((block.text for block in response.content if block.type == "text"),"").strip()
+    # The reply can contain a thinking block before the text block,
+    # so pick the block whose type is 'text' instead of assuming [0].
+    sql = next(
+        (block.text for block in response.content if block.type == "text"),
+        "",
+    ).strip()
 
-    # Claude sometimes wraps SQL in ```sql fences despite instructions.
-    # Strip them defensively rather than trusting the prompt alone.
     sql = re.sub(r"^```sql\s*|^```\s*|```$", "", sql, flags=re.MULTILINE).strip()
-
     return sql
 
-
-# -----------------------------------------------------------------
-# 3. Safety check -- THE MOST IMPORTANT FUNCTION IN THIS PROJECT
-# -----------------------------------------------------------------
-# WHY this exists: an LLM is not a trusted component. Prompt
-# injection, a bad model response, or a bug could produce SQL that
-# deletes data. NEVER execute LLM-generated SQL against a real
-# database without a check like this. This is exactly the kind of
-# thing an interviewer will ask you about -- be ready to explain it.
 
 FORBIDDEN_KEYWORDS = [
     "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
@@ -150,23 +94,17 @@ FORBIDDEN_KEYWORDS = [
 
 
 def is_safe_select(sql: str) -> tuple[bool, str]:
-    """
-    Returns (is_safe, reason). Only allows a single SELECT statement.
-    """
     cleaned = sql.strip().rstrip(";")
 
     if not cleaned:
         return False, "Empty query."
-
     if ";" in cleaned:
         return False, "Multiple statements are not allowed."
-
     if not cleaned.upper().startswith("SELECT"):
         return False, "Only SELECT statements are allowed."
 
     upper = cleaned.upper()
     for word in FORBIDDEN_KEYWORDS:
-        # \b so we don't false-positive on e.g. a column named 'created_at'
         if re.search(rf"\b{word}\b", upper):
             return False, f"Forbidden keyword detected: {word}"
 
@@ -174,17 +112,14 @@ def is_safe_select(sql: str) -> tuple[bool, str]:
 
 
 def run_query(sql: str, db_path: str = DB_PATH):
-    """
-    Executes a SELECT query and returns (columns, rows).
-    Only call this AFTER is_safe_select() has returned True --
-    this function does not re-check safety itself, by design, so
-    the safety check is never accidentally skipped by a caller
-    that forgets to call it.
-    """
+    """Run a SELECT. Only call after is_safe_select() returned True."""
+    ensure_db()  # guarantees the tables exist before we connect
     conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    cur.execute(sql)
-    columns = [desc[0] for desc in cur.description]
-    rows = cur.fetchall()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        columns = [desc[0] for desc in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
     return columns, rows

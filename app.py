@@ -1,44 +1,14 @@
 """
 app.py
 ------
-The Streamlit UI. Deliberately thin -- almost everything interesting
-happens in nl_to_sql.py. This file's only job is: take input, call
-the logic functions in the right order, display output.
-
-Run locally with:  streamlit run app.py
+The Streamlit UI. Run locally with:  streamlit run app.py
 """
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
+
+from charts import pick_chart
 from nl_to_sql import generate_sql, is_safe_select, run_query
-
-import os
-import sqlite3
-from build_db import build, DB_PATH
-
-
-def db_ready():
-    if not os.path.exists(DB_PATH):
-        return False
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        found = conn.execute(
-            "SELECT COUNT(*) FROM sqlite_master WHERE name='customers'"
-        ).fetchone()[0]
-        conn.close()
-        return found == 1
-    except sqlite3.Error:
-        return False
-
-
-@st.cache_resource
-def init_db():
-    if not db_ready():
-        build()
-    return True
-
-
-init_db()
 
 st.set_page_config(page_title="NL to SQL Analytics", page_icon="📊")
 
@@ -58,7 +28,10 @@ with st.expander("Example questions to try"):
         "- Which customers signed up in 2024 but have never ordered?"
     )
 
-question = st.text_input("Your question", placeholder="e.g. What are the top 5 products by revenue?")
+question = st.text_input(
+    "Your question",
+    placeholder="e.g. What are the top 5 products by revenue?",
+)
 
 if st.button("Ask", type="primary") and question:
     with st.spinner("Thinking..."):
@@ -75,9 +48,7 @@ if st.button("Ask", type="primary") and question:
     st.subheader("Generated SQL")
     st.code(sql, language="sql")
 
-    # --- THE SAFETY GATE ---
-    # This is non-negotiable: we never run SQL from an LLM without
-    # checking it first. See nl_to_sql.is_safe_select for the logic.
+    # Safety gate: never run model-written SQL without checking it.
     safe, reason = is_safe_select(sql)
     if not safe:
         st.error(f"Blocked for safety: {reason}")
@@ -98,16 +69,12 @@ if st.button("Ask", type="primary") and question:
     st.subheader("Results")
     st.dataframe(df, use_container_width=True)
 
-    # --- Auto-chart: only if it makes sense ---
-    # Heuristic: one text/categorical column + one numeric column
-    # is the classic "bar chart" shape. Anything else, we just show
-    # the table -- forcing a chart onto data that doesn't fit one
-    # (like a single row, or 5 numeric columns) does more harm than
-    # good.
-    numeric_cols = df.select_dtypes(include="number").columns.tolist()
-    non_numeric_cols = [c for c in df.columns if c not in numeric_cols]
-
-    if len(numeric_cols) >= 1 and len(non_numeric_cols) == 1 and len(df) <= 25:
+    kind, chart_df, note = pick_chart(df)
+    if kind == "bar":
         st.subheader("Chart")
-        chart_df = df.set_index(non_numeric_cols[0])[numeric_cols[0]]
         st.bar_chart(chart_df)
+    elif kind == "line":
+        st.subheader("Chart")
+        st.line_chart(chart_df)
+    else:
+        st.caption(f"No chart for this result: {note}")
