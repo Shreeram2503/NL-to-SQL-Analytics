@@ -38,26 +38,26 @@ Results table (pandas) -> auto chart (if the shape fits)
 * **Streamlit** — web UI, no frontend code needed
 * **Anthropic Claude API** — natural language to SQL translation
 * **SQLite** — lightweight embedded database (retail dataset, generated
-synthetically — see `build\_db.py`)
+synthetically — see `build\\\_db.py`)
 * **Pandas** — results handling and chart data shaping
 
 ## Database schema
 
-Four tables: `customers`, `products`, `orders`, `order\_items` — a standard
-normalized retail schema. See `nl\_to\_sql.py` for the full column list.
+Four tables: `customers`, `products`, `orders`, `order\\\_items` — a standard
+normalized retail schema. See `nl\\\_to\\\_sql.py` for the full column list.
 
 ## Setup
 
 ```bash
 # 1. Clone and enter the project
 git clone <your-repo-url>
-cd nl2sql\_project
+cd nl2sql\\\_project
 
 # 2. Install dependencies
 pip install -r requirements.txt
 
 # 3. Build the database (creates retail.db)
-python build\_db.py
+python build\\\_db.py
 
 # 4. Add your API key
 cp .env.example .env
@@ -72,7 +72,7 @@ The app will open at `http://localhost:8501`.
 ## Safety design
 
 LLM output is never trusted blindly. Every generated query passes through
-`is\_safe\_select()` before it touches the database:
+`is\\\_safe\\\_select()` before it touches the database:
 
 * Must start with `SELECT`
 * Must be a single statement (no `;`-chained commands)
@@ -93,7 +93,7 @@ GitHub repo
 3. In the app's "Secrets" settings, add:
 
 ```
-   ANTHROPIC\_API\_KEY = "your-key-here"
+   ANTHROPIC\\\_API\\\_KEY = "your-key-here"
    ```
 
 4. Deploy — you'll get a public URL to put on your resume and LinkedIn
@@ -104,4 +104,18 @@ GitHub repo
 * Support more chart types (line charts for time-series questions)
 * Add a query history sidebar
 * Swap SQLite for Postgres to demonstrate a "real" production database
+
+
+
+\## Challenges and fixes
+
+\- Model response parsing: newer models can return a thinking block before the text block, so response.content\[0].text crashed. Fixed by selecting the block whose type is text.
+
+\- Hosting: the deployed filesystem is read-only, so the SQLite file is created in the system temp directory.
+
+\- Startup race: the database check only tested whether the file existed, so an empty file skipped the build and queries failed with "no such table". Fixed by checking that the customers table exists and building the database once per server process.
+
+\- Secrets: the API key lives in a local .env file and in Streamlit Cloud secrets, never in the repo.
+
+\- Startup race on the hosted app: the database check only tested whether the file existed, so an empty leftover file skipped the build and queries failed with "no such table". Fixed by checking that the customers table exists and building the database once per server process.
 
