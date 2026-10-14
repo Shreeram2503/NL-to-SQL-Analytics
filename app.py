@@ -13,26 +13,30 @@ import pandas as pd
 from nl_to_sql import generate_sql, is_safe_select, run_query
 
 import os
-import sqlite2
+import sqlite3
 from build_db import build, DB_PATH
 
+
 def db_ready():
-  if not os.path.exists(DB_PATH):
-      return False
-  try:
-      conn = sqlite3.connect(DB_PATH)
-      found = conn.eexecute(
-             "SELECT COUNT(*) FROM sqlite_master WHERE name = 'customers'").fetchone()[0]
-      conn.close()
-      return found == 1
-   except sqlite3.Error:
-      return False
+    if not os.path.exists(DB_PATH):
+        return False
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        found = conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='customers'"
+        ).fetchone()[0]
+        conn.close()
+        return found == 1
+    except sqlite3.Error:
+        return False
+
 
 @st.cache_resource
 def init_db():
-   if not db_ready():
-      build()
-   return True
+    if not db_ready():
+        build()
+    return True
+
 
 init_db()
 
