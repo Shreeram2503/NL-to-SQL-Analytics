@@ -6,6 +6,10 @@ no SQL knowledge required to use it.
 
 **\[Live demo link - https://nl-2-sql-assistant.streamlit.app/]**
 
+## Project screenshots:
+![demo](pagedemo1.png)
+![demo](pagedemo2.jpeg)
+
 ## Why this project
 Most entry-level data portfolios show static dashboards or one-off EDA
 notebooks. This is a small working *application*: it takes live user input,
